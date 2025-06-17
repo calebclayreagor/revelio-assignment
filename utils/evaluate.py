@@ -1,48 +1,44 @@
 import numpy as np
 import geopandas as gpd
-from scipy.spatial.distance import jensenshannon
 import matplotlib.pyplot as plt
+from shapely.geometry import Point
 from matplotlib.axes import Axes
+from scipy.spatial.distance import jensenshannon
+from scipy.stats import entropy
 
 def get_dpc_clusters(gdf: gpd.GeoDataFrame,
                      cluster_key: str,
                      population_key: str = 'population',
                      crs_proj: str = 'EPSG:4087',
-                     return_log: bool = True,
-                     return_sorted: bool = True,
-                     inplace: bool = True
-                     ) -> None | gpd.GeoDataFrame:
-
-    if not inplace:
-        gdf = gdf.copy()
+                     return_sorted: bool = True
+                     ) -> gpd.GeoDataFrame:
 
     crs = gdf.crs
+    gdf = gdf.copy()
     gdf.to_crs(crs_proj, inplace = True)
 
-    # distance to cluster centroid
-    centroids = gdf.dissolve(cluster_key).centroid
-    gdf[f'{cluster_key}_centroid'] = gdf[cluster_key].map(centroids)
-    gdf['d_centroid'] = gdf.distance(gdf[f'{cluster_key}_centroid'])
-    gdf.drop(f'{cluster_key}_centroid', axis = 1, inplace = True)
+    # distance to cluster centroid (weighted)
+    centroids_map = (gdf.groupby(cluster_key).apply(lambda row: Point(
+                      np.average(row.geometry.x, weights = row[population_key]),
+                      np.average(row.geometry.y, weights = row[population_key]))))
+    centroids = gpd.GeoSeries(gdf[cluster_key].map(centroids_map), crs = crs_proj)
+    gdf['d_centroid'] = gdf.geometry.distance(centroids)
+    gdf[f'{cluster_key}_ref'] = gdf[cluster_key].copy()
 
     # cluster total population
     population = gdf.groupby(cluster_key)[population_key].sum()
-    gdf[f'{cluster_key}_{population_key}'] = gdf[cluster_key].map(population)
+    gdf['total_population'] = gdf[cluster_key].map(population)
 
     # distance per capita
-    gdf['dpc'] = gdf.d_centroid / gdf[f'{cluster_key}_{population_key}']
-    gdf.drop(columns = ['d_centroid', f'{cluster_key}_{population_key}'], inplace = True)
-
-    if return_log:
-        gdf['log10_dpc'] = np.log10(gdf.dpc)
+    gdf['dpc'] = gdf.d_centroid / gdf.total_population
+    gdf['log10_dpc'] = np.log10(gdf.dpc)
+    gdf.drop(columns = ['d_centroid', 'total_population'], inplace = True)
 
     if return_sorted:
         gdf.sort_values('dpc', inplace = True)
     
     gdf.to_crs(crs, inplace = True)
-
-    if not inplace:
-        return gdf
+    return gdf
 
 
 def get_dpc_unassigned(gdf: gpd.GeoDataFrame,
@@ -50,7 +46,6 @@ def get_dpc_unassigned(gdf: gpd.GeoDataFrame,
                        cluster_key: str,
                        population_key: str = 'population',
                        crs_proj: str = 'EPSG:4087',
-                       return_log: bool = True,
                        return_sorted: bool = True
                        ) -> gpd.GeoDataFrame:
 
@@ -58,31 +53,30 @@ def get_dpc_unassigned(gdf: gpd.GeoDataFrame,
     gdf = gdf.to_crs(crs_proj).copy()
     gdf_ref = gdf_ref.to_crs(crs_proj).copy()
 
-    # ref clusters — centroids & populations
-    centroids = gdf_ref.dissolve(cluster_key).centroid
+    # centroids & populations (ref clusters)
+    centroids = gdf_ref.groupby(cluster_key).apply(lambda row: Point(
+                    np.average(row.geometry.x, weights = row[population_key]),
+                    np.average(row.geometry.y, weights = row[population_key])))
     gdf_centroids = gpd.GeoDataFrame(
-        {f'{cluster_key}_ref' : centroids.index, 'geometry' : centroids},
+        {'cluster_ref': centroids.index, 'geometry': centroids.values},
         geometry = 'geometry', crs = crs_proj)
     population = gdf_ref.groupby(cluster_key)[population_key].sum()
-    gdf_centroids[f'{cluster_key}_ref_{population_key}'] = gdf_centroids[f'{cluster_key}_ref'].map(population)
-    gdf_centroids.drop(f'{cluster_key}_ref', axis = 1, inplace = True)
+    gdf_centroids['total_population'] = gdf_centroids['cluster_ref'].map(population)
 
-    # unassigned — nearest centroids
+    # nearest centroids (unassigned)
     gdf_return = gpd.sjoin_nearest(
         gdf, gdf_centroids,
         how = 'left',
         lsuffix = 'orig',
         rsuffix = 'ref',
         distance_col = 'd_centroid')
-    gdf_return[cluster_key] = gdf_return[f'{cluster_key}_orig']
-    gdf_return.drop(f'{cluster_key}_orig', axis = 1, inplace = True)
+    gdf_return.rename(columns = {'cluster_ref' : f'{cluster_key}_ref'}, inplace = True)
+    gdf_return.drop('index_ref', axis = 1, inplace = True)
 
     # distance per capita
-    gdf_return['dpc'] = gdf_return.d_centroid / gdf_return[f'{cluster_key}_ref_{population_key}']
-    gdf_return.drop(columns = ['d_centroid', f'{cluster_key}_ref_{population_key}'], axis = 1, inplace = True)
-
-    if return_log:
-        gdf_return['log10_dpc'] = np.log10(gdf_return.dpc)
+    gdf_return['dpc'] = gdf_return.d_centroid / gdf_return.total_population
+    gdf_return['log10_dpc'] = np.log10(gdf_return.dpc)
+    gdf_return.drop(columns = ['d_centroid', 'total_population'], inplace = True)
     
     if return_sorted:
         gdf_return.sort_values('dpc', inplace = True)
@@ -96,6 +90,8 @@ def get_jsdiv(gdf1: gpd.GeoDataFrame,
               metric_key: str,
               n_bins: int = 100,
               eps: float = 1e-3,
+              return_S: bool = False,
+              normalize_S: bool = True,
               plot: bool = False,
               ax: Axes | None = None,
               return_ax: bool = False,
@@ -123,6 +119,18 @@ def get_jsdiv(gdf1: gpd.GeoDataFrame,
 
     # Jensen-Shannon divergence
     jsdiv = jensenshannon(p, q, base = 2)
+
+    # entropy (per category)
+    if return_S:
+        S1 = entropy(p, base = 2)
+        S2 = entropy(q, base = 2)
+
+        if normalize_S:
+            S1 /= np.log2(n_bins)
+            S2 /= np.log2(n_bins)
+        result = (jsdiv, S1, S2)
+    else:
+        result = jsdiv
 
     if plot:
         if gdf1_label is None:
@@ -155,10 +163,8 @@ def get_jsdiv(gdf1: gpd.GeoDataFrame,
                 label = gdf2_label)
         
         if return_ax:
-            return jsdiv, ax
-        
+            return result, ax
         else:
-            return jsdiv
-
+            return result
     else:
-        return jsdiv
+        return result
