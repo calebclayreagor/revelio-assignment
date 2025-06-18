@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt
 from shapely.geometry import Point
 from matplotlib.axes import Axes
 from scipy.spatial.distance import jensenshannon
-from scipy.stats import entropy
 
 def get_dpc_clusters(gdf: gpd.GeoDataFrame,
                      cluster_key: str,
@@ -25,17 +24,16 @@ def get_dpc_clusters(gdf: gpd.GeoDataFrame,
     gdf['d_centroid'] = gdf.geometry.distance(centroids)
     gdf[f'{cluster_key}_ref'] = gdf[cluster_key].copy()
 
-    # cluster total population
+    # total population (cluster)
     population = gdf.groupby(cluster_key)[population_key].sum()
     gdf['total_population'] = gdf[cluster_key].map(population)
 
     # distance per capita
-    gdf['dpc'] = gdf.d_centroid / gdf.total_population
-    gdf['log10_dpc'] = np.log10(gdf.dpc)
+    gdf['log10_dpc'] = np.log10(gdf.d_centroid / gdf.total_population)
     gdf.drop(columns = ['d_centroid', 'total_population'], inplace = True)
 
     if return_sorted:
-        gdf.sort_values('dpc', inplace = True)
+        gdf.sort_values('log10_dpc', inplace = True)
     
     gdf.to_crs(crs, inplace = True)
     return gdf
@@ -63,7 +61,7 @@ def get_dpc_unassigned(gdf: gpd.GeoDataFrame,
     population = gdf_ref.groupby(cluster_key)[population_key].sum()
     gdf_centroids['total_population'] = gdf_centroids['cluster_ref'].map(population)
 
-    # nearest centroids (unassigned)
+    # nearest centroids to unassigned
     gdf_return = gpd.sjoin_nearest(
         gdf, gdf_centroids,
         how = 'left',
@@ -74,12 +72,11 @@ def get_dpc_unassigned(gdf: gpd.GeoDataFrame,
     gdf_return.drop('index_ref', axis = 1, inplace = True)
 
     # distance per capita
-    gdf_return['dpc'] = gdf_return.d_centroid / gdf_return.total_population
-    gdf_return['log10_dpc'] = np.log10(gdf_return.dpc)
+    gdf_return['log10_dpc'] = np.log10(gdf_return.d_centroid / gdf_return.total_population)
     gdf_return.drop(columns = ['d_centroid', 'total_population'], inplace = True)
     
     if return_sorted:
-        gdf_return.sort_values('dpc', inplace = True)
+        gdf_return.sort_values('log10_dpc', inplace = True)
 
     gdf_return.to_crs(crs, inplace = True)
     return gdf_return
@@ -87,18 +84,16 @@ def get_dpc_unassigned(gdf: gpd.GeoDataFrame,
 
 def get_jsdiv(gdf1: gpd.GeoDataFrame,
               gdf2: gpd.GeoDataFrame,
-              metric_key: str,
+              metric_key: str = 'log10_dpc',
               n_bins: int = 100,
-              eps: float = 1e-3,
-              return_S: bool = False,
-              normalize_S: bool = True,
+              eps: float = 1e-6,
               plot: bool = False,
               ax: Axes | None = None,
               return_ax: bool = False,
               gdf1_label: str | None = None,
               gdf2_label: str | None = None,
-              gdf1_facecolor: str | None = None,
-              gdf2_facecolor: str | None = None,
+              gdf1_facecolor: str = 'cornflowerblue',
+              gdf2_facecolor: str = 'tomato',
               facecolor_alpha: float = .33
               ) -> float | tuple[float, Axes]:
     
@@ -120,31 +115,7 @@ def get_jsdiv(gdf1: gpd.GeoDataFrame,
     # Jensen-Shannon divergence
     jsdiv = jensenshannon(p, q, base = 2)
 
-    # entropy (per category)
-    if return_S:
-        S1 = entropy(p, base = 2)
-        S2 = entropy(q, base = 2)
-
-        if normalize_S:
-            S1 /= np.log2(n_bins)
-            S2 /= np.log2(n_bins)
-        result = (jsdiv, S1, S2)
-    else:
-        result = jsdiv
-
     if plot:
-        if gdf1_label is None:
-            gdf1_label = 'GeoDataFrame1'
-
-        if gdf2_label is None:
-            gdf2_label = 'GeoDataFrame2'
-
-        if gdf1_facecolor is None:
-            gdf1_facecolor = 'cornflowerblue'
-
-        if gdf2_facecolor is None:
-            gdf2_facecolor = 'tomato'
-
         if ax is None:
             _, ax = plt.subplots(1, 1, figsize = (6, 2.5))
 
@@ -163,8 +134,8 @@ def get_jsdiv(gdf1: gpd.GeoDataFrame,
                 label = gdf2_label)
         
         if return_ax:
-            return result, ax
+            return jsdiv, ax
         else:
-            return result
+            return jsdiv
     else:
-        return result
+        return jsdiv
