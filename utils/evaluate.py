@@ -1,9 +1,46 @@
 import numpy as np
+import pandas as pd
 import geopandas as gpd
 import matplotlib.pyplot as plt
 from shapely.geometry import Point
 from matplotlib.axes import Axes
 from scipy.spatial.distance import jensenshannon
+
+def evaluate_density(gdf: gpd.GeoDataFrame,
+                     cluster_key: str,
+                     population_key: str = 'population',
+                     crs_proj: str = 'EPSG:4087',
+                     return_sorted: bool = True
+                     ) -> gpd.GeoDataFrame:
+    """Compute log10 distance-per-capita (DPC) for clustered and unassigned cities"""
+    
+    # split clustered vs. unassigned
+    gdf = gdf.copy()
+    clus_msk = gdf[cluster_key].notna()
+    gdf_clus = gdf.loc[clus_msk].copy()
+    gdf_other = gdf.loc[~clus_msk].copy()
+
+    # compute distance per capita
+    gdf_clus = get_dpc_clusters(gdf = gdf_clus,
+                                cluster_key = cluster_key,
+                                population_key = population_key,
+                                crs_proj = crs_proj,
+                                return_sorted = return_sorted)
+    gdf_other = get_dpc_unassigned(gdf = gdf_other,
+                                   gdf_ref = gdf_clus,
+                                   cluster_key = cluster_key,
+                                   population_key = population_key,
+                                   crs_proj = crs_proj,
+                                   return_sorted = return_sorted)
+    gdf_return = pd.concat((gdf_clus, gdf_other), axis = 0)
+
+    if return_sorted:
+        gdf_return.sort_values('log10_dpc', inplace = True)
+    else:
+        gdf_return = gdf_return.loc[gdf.index]
+
+    return gdf_return
+
 
 def get_dpc_clusters(gdf: gpd.GeoDataFrame,
                      cluster_key: str,
@@ -16,7 +53,7 @@ def get_dpc_clusters(gdf: gpd.GeoDataFrame,
     gdf = gdf.copy()
     gdf.to_crs(crs_proj, inplace = True)
 
-    # distance to cluster centroid (weighted)
+    # distance to population-weighted cluster centroid
     centroids_map = (gdf.groupby(cluster_key).apply(lambda row: Point(
                       np.average(row.geometry.x, weights = row[population_key]),
                       np.average(row.geometry.y, weights = row[population_key]))))
@@ -24,11 +61,11 @@ def get_dpc_clusters(gdf: gpd.GeoDataFrame,
     gdf['d_centroid'] = gdf.geometry.distance(centroids)
     gdf[f'{cluster_key}_ref'] = gdf[cluster_key].copy()
 
-    # total population (cluster)
+    # total cluster population
     population = gdf.groupby(cluster_key)[population_key].sum()
     gdf['total_population'] = gdf[cluster_key].map(population)
 
-    # distance per capita
+    # distance per capita (log scale)
     gdf['log10_dpc'] = np.log10(gdf.d_centroid / gdf.total_population)
     gdf.drop(columns = ['d_centroid', 'total_population'], inplace = True)
 
@@ -71,7 +108,7 @@ def get_dpc_unassigned(gdf: gpd.GeoDataFrame,
     gdf_return.rename(columns = {'cluster_ref' : f'{cluster_key}_ref'}, inplace = True)
     gdf_return.drop('index_ref', axis = 1, inplace = True)
 
-    # distance per capita
+    # distance per capita (log scale)
     gdf_return['log10_dpc'] = np.log10(gdf_return.d_centroid / gdf_return.total_population)
     gdf_return.drop(columns = ['d_centroid', 'total_population'], inplace = True)
     
@@ -82,31 +119,34 @@ def get_dpc_unassigned(gdf: gpd.GeoDataFrame,
     return gdf_return
 
 
-def get_jsdiv(gdf1: gpd.GeoDataFrame,
-              gdf2: gpd.GeoDataFrame,
+def get_jsdiv(gdf: gpd.GeoDataFrame,
+              cluster_key: str,
               metric_key: str = 'log10_dpc',
               n_bins: int = 100,
               eps: float = 1e-6,
               plot: bool = False,
               ax: Axes | None = None,
               return_ax: bool = False,
-              gdf1_label: str | None = None,
-              gdf2_label: str | None = None,
-              gdf1_facecolor: str = 'cornflowerblue',
-              gdf2_facecolor: str = 'tomato',
+              clus_label: str | None = None,
+              other_label: str | None = None,
+              clus_facecolor: str = 'cornflowerblue',
+              other_facecolor: str = 'tomato',
               facecolor_alpha: float = .33
               ) -> float | tuple[float, Axes]:
-    
-    # define metric range
-    metric1 = gdf1[metric_key]
-    metric2 = gdf2[metric_key]
-    metric_min = min(metric1.min(), metric2.min())
-    metric_max = max(metric1.max(), metric2.max())
-    bins = np.linspace(metric_min, metric_max, n_bins)
+    """
+    Compute Jensen-Shannon divergence between clustered and unassigned metric distributions.
+    Optionally plot overlapping histograms.
+    """
     
     # compute probability densities
-    p_hist, _ = np.histogram(metric1, bins = bins, density = True)
-    q_hist, _ = np.histogram(metric2, bins = bins, density = True)
+    clus_msk = gdf[cluster_key].notna()
+    metric_clus = gdf.loc[clus_msk, metric_key].values
+    metric_other = gdf.loc[~clus_msk, metric_key].values
+    bins = np.linspace(gdf[metric_key].min(), gdf[metric_key].max(), n_bins)
+    p_hist, _ = np.histogram(metric_clus, bins = bins)
+    q_hist, _ = np.histogram(metric_other, bins = bins)
+    p_hist = p_hist.astype(np.float64)
+    q_hist = q_hist.astype(np.float64)
     p_hist += eps
     q_hist += eps
     p = p_hist / p_hist.sum()
@@ -119,19 +159,22 @@ def get_jsdiv(gdf1: gpd.GeoDataFrame,
         if ax is None:
             _, ax = plt.subplots(1, 1, figsize = (6, 2.5))
 
-        ax.hist(metric1,
+        ax.hist(metric_clus,
                 bins = bins,
-                facecolor = gdf1_facecolor,
+                facecolor = clus_facecolor,
                 alpha = facecolor_alpha,
                 density = True,
-                label = gdf1_label)
+                label = clus_label)
         
-        ax.hist(metric2,
+        ax.hist(metric_other,
                 bins = bins,
-                facecolor = gdf2_facecolor,
+                facecolor = other_facecolor,
                 alpha = facecolor_alpha,
                 density = True,
-                label = gdf2_label)
+                label = other_label)
+        
+        if clus_label or other_label:
+            ax.legend(frameon = False)
         
         if return_ax:
             return jsdiv, ax
