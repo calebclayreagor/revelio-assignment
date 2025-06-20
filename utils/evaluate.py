@@ -159,6 +159,12 @@ def get_jsdiv(gdf: gpd.GeoDataFrame,
         if ax is None:
             _, ax = plt.subplots(1, 1, figsize = (6, 2.5))
 
+        if clus_label:
+            clus_label = fr'{clus_label} ($\mu={metric_clus.mean().round(2)}$)'
+
+        if other_label:
+            other_label = fr'{other_label} ($\mu={metric_other.mean().round(2)}$)'
+
         ax.hist(metric_clus,
                 bins = bins,
                 facecolor = clus_facecolor,
