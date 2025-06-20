@@ -83,7 +83,7 @@ My final clustering results can be found in [`ClusteringResults.csv`](data/Clust
 
     - Consequently, my algorithm clusters a greater proportion of total cities (82 vs. 69%) and people (94 vs. 87%) than traditional MSAs
 
-        - These areas are properly categorized as **metropolitan** based on DPC convergence and $\sim 2 \times$ increase in $JS_{div}$ compared to traditional MSAs
+        - These areas are **properly categorized as metropolitan** based on DPC convergence and $\sim 2 \times$ increase in $JS_{div}$ compared to traditional MSAs
 
 2. My algorithm **performs slightly worse on international data** based on $JS_{div}$ (0.63 vs. 0.73 for US)
 
