@@ -103,7 +103,7 @@ When interpreting the results of my clustering and analysis, it is important to 
 
     - Future fix — implement $\epsilon$ decay alongside population-threshold decay during iterations
 
-2. Density-based clustering fails to identify meaningful patterns that define metropolitan areas in areas with uniform density (*e.g.*, Europe)
+2. Density-based clustering fails to identify meaningful patterns that define metropolitan areas in regions with uniform density (*e.g.*, Europe)
 
     - Future fix — fit a European-specific model with tuned hyperparameters that better separate uniformly-dense regions
 
