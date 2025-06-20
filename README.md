@@ -14,7 +14,7 @@ $DPC=\frac{\text{distance to the nearest cluster centroid}}{\text{total populati
 
 where each centroid is defined as the population-weighted average location of cities belonging to that cluster. For cities in metropolitan areas, the nearest centroids correspond to their own clusters, whereas nonmetropolitan areas are evaluated relative to their closest non-member clusters. Because DPC assesses a city's proximity relative to an area's total population, this metric is scale-invariant and can describe clusters of both large and small cities.
 
-My function [`utils.evaluate.evaluate_density`](utils/evaluate.py) computes the $log_{10}$ $\text{DPC}$ for any arbitrary clustering scheme.
+My function [`utils.evaluate.evaluate_density`](utils/evaluate.py#L9-42) computes the $log_{10}$ $\text{DPC}$ for any arbitrary clustering scheme.
 
 ### Urban *versus* rural separation
 
@@ -24,7 +24,7 @@ $JS_{div}=\sqrt{\frac{KL_{k,\varnothing} + KL_{\varnothing,k}}{2}} \in [0, 1]$
 
 where $KL_{i,j}$ is the Kullback-Leibler divergence between distributions $i,j$, and $k,\varnothing$ represent the $log_{10}$ $\text{DPC}$ distributions for the clustered and unassigned cities, respectively. Values of $JS_{div}$ near 0 indicate poor separation, whereas values near 1 indicate significant heterogeneity between urban (clustered) and rural (unassigned) areas.
 
-My function [`utils.evaluate.get_jsdiv`](utils/evaluate.py) computes the $JS_{div}$ between clustered and unassigned cities.
+My function [`utils.evaluate.get_jsdiv`](utils/evaluate.py#L122-190) computes the $JS_{div}$ between clustered and unassigned cities.
 
 ### Iterative density-based clustering
 
@@ -48,7 +48,7 @@ Because the provided data contains relatively few features except for cities' lo
 
 This approach incrementally assigns cities to metropolitan areas from denser to sparser regions through gradual relaxation of the minimum sample-weight threshold in DBSCAN. For the final metropolitan-area assignments, I set the maximum number of iterations $N$ based on convergence of the mean proximity metrics $\text{DPC}_{k,\varnothing}$ across clustered and unassigned cities. 
 
-My algorithm can be run using the function [`utils.modeling.fit_iterative_density_model`](utils/modeling.py). The notebook [density_based_modeling.ipynb](notebooks/density_based_modeling.ipynb) fits my model to the current data.
+My algorithm can be run using the function [`utils.modeling.fit_iterative_density_model`](utils/modeling.py#L9-87). The notebook [density_based_modeling.ipynb](notebooks/density_based_modeling.ipynb) fits my model to the current data.
 
 ## Key Findings
 
@@ -75,7 +75,7 @@ My final clustering results can be found in [ClusteringResults.csv](data/Cluster
 
     a. On average, my clusters have **fewer cities** (~8 vs. 15) **and people** (~300 vs. 575k) than traditional MSAs
 
-    b. This is *not* due to the splitting of large cities (see [percentile distributions](notebooks/evaluation/msa_us_only.ipynb) & [large-city Sankey plot](notebooks/evaluation/density_clusters_us_only.ipynb))
+    b. This is *not* due to the splitting of large cities (see [MSA](notebooks/evaluation/msa_us_only.ipynb#population-percentiles)/[density cluster](notebooks/evaluation/density_clusters_us_only.ipynb#population-percentiles) percentile distributions & [large-city Sankey plot](notebooks/evaluation/density_clusters_us_only.ipynb#sankey-plot-label-comparison))
 
     - In several cases, my algorithm actually *merges* adjacent large cities (*e.g.*, LA/Riverside, SF/San Jose, and DC/Baltimore)
 
@@ -91,9 +91,9 @@ My final clustering results can be found in [ClusteringResults.csv](data/Cluster
 
     b. Fewer international cities belong to metropolitan areas than in the US (76 vs. 82%), comprising only 56% of the international population
 
-    - Gradual population decreases for smaller clusters (see [percentile distribution](notebooks/evaluation/density_clusters_international.ipynb)) suggest that **more international cities are truly nonmetropolitan**
+    - Gradual population decreases for smaller clusters (see [percentile distribution](notebooks/evaluation/density_clusters_international.ipynb##population-percentiles)) suggest that **more international cities are truly nonmetropolitan**
 
-    c. Inspection of [edge cases](notebooks/evaluation/density_clusters_international.ipynb) with high DPC values suggests that European cities are the least suited to density-based clustering and analysis
+    c. Inspection of [edge cases](notebooks/evaluation/density_clusters_international.ipynb##worst-best-cluster-assignments) with high DPC values suggests that European cities are the least suited to density-based clustering and analysis
 
 ## Limitations
 
