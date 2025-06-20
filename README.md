@@ -105,7 +105,7 @@ When interpreting the results of my clustering and analysis, it is important to 
 
 2. Density-based clustering fails to identify meaningful patterns that define metropolitan areas in regions with uniform density (*e.g.*, Europe)
 
-    - Future fix — fit a European-specific model with tuned hyperparameters that better separate uniformly-dense regions
+    - Future fix — fit region-specific models with tuned hyperparameters that better separate uniform regions
 
 3. Density-based clustering relies solely on spatial and population features, which limits its overall effectiveness
 
