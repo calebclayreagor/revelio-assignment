@@ -91,7 +91,7 @@ My final clustering results can be found in [`ClusteringResults.csv`](data/Clust
 
     b. Fewer international cities belong to metropolitan areas than in the US (76 vs. 82%), comprising only 56% of the international population
 
-    - Gradual population decreases for smaller clusters (see [percentile distribution](notebooks/evaluation/density_clusters_international.ipynb#population-percentiles)) suggest that **more international cities are truly nonmetropolitan**
+    - Gradual population decrease for smaller clusters (see [percentile distribution](notebooks/evaluation/density_clusters_international.ipynb#population-percentiles)) suggest that **these international cities are truly nonmetropolitan**
 
     c. Inspection of [edge cases](notebooks/evaluation/density_clusters_international.ipynb#worst-best-cluster-assignments) with high DPC values suggests that European cities are the least suited to density-based clustering and analysis
 
