@@ -71,7 +71,7 @@ My final clustering results can be found in [`ClusteringResults.csv`](data/Clust
 
 ### Highlights
 
-1. My algorithm identifies **more metropolitan areas** than the traditional approach (699 vs. 336)
+1. My algorithm identifies **more metropolitan areas** than the traditional approach (699 vs. 336) for US cities
 
     a. On average, my clusters have **fewer cities** (~8 vs. 15) **and people** (~300 vs. 575k) than traditional MSAs
 
